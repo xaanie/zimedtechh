@@ -10,6 +10,8 @@ import {
   AssessmentInput,
   Assessment,
   AssessmentType,
+  ExamInput,
+  ExamPaper,
 } from "../types";
 import { getSyllabusForGrade } from "../data/syllabusContext";
 
@@ -132,9 +134,6 @@ Grade: ${input.grade}
 Subject: ${input.subject}
 Topic: ${input.topic}
 
-Syllabus Context:
-${syllabusContext}
-
 Return JSON:
 { "cards": [{ "front": "...", "back": "..." }] }
 `,
@@ -160,7 +159,7 @@ Return JSON:
 };
 
 /* =========================
-   ASSESSMENT / TEST
+   ASSESSMENT
 ========================= */
 
 export const generateAssessment = async (
@@ -178,27 +177,12 @@ Subject: ${input.subject}
 Topic: ${input.topic}
 Type: ${input.type}
 
-Syllabus Context:
-${syllabusContext}
-
-Rules:
-- MCQ: 4 options
-- Structured: short answers
-- Composition: essay prompts
-
-Return JSON:
-{
-  title,
-  questions: [
-    { id, section, type, question, options?, answer, marks }
-  ]
-}
+Return JSON with questions and marks.
 `,
     config: { responseMimeType: "application/json" },
   });
 
   const data = JSON.parse(response.text || "{}");
-
   const questions = Array.isArray(data.questions) ? data.questions : [];
   const totalMarks = questions.reduce(
     (sum: number, q: any) => sum + (q.marks || 1),
@@ -211,6 +195,54 @@ Return JSON:
     subject: input.subject,
     topic: input.topic,
     questions,
+    totalMarks,
+  };
+};
+
+/* =========================
+   END OF TERM EXAM (FINAL)
+========================= */
+
+export const generateEndTermExam = async (
+  input: ExamInput
+): Promise<ExamPaper> => {
+  const syllabusContext = getSyllabusForGrade(input.grade, input.subject);
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: `
+Create an END OF TERM EXAM.
+
+Grade: ${input.grade}
+Subject: ${input.subject}
+Term: ${input.term}
+Year: ${input.year}
+
+Structure:
+- Section A: MCQs
+- Section B: Structured
+- Section C: Long answer / Composition
+
+Return JSON with sections.
+`,
+    config: { responseMimeType: "application/json" },
+  });
+
+  const data = JSON.parse(response.text || "{}");
+  const sections = Array.isArray(data.sections) ? data.sections : [];
+  const totalMarks = sections.reduce(
+    (sum: number, s: any) => sum + (s.sectionMarks || 0),
+    0
+  );
+
+  return {
+    schoolName: input.schoolName,
+    grade: input.grade,
+    subject: input.subject,
+    term: input.term,
+    year: input.year,
+    duration: input.duration,
+    sections,
     totalMarks,
   };
 };

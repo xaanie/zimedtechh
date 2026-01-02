@@ -5,6 +5,8 @@ import {
   SchemeOfWork,
   LessonInput,
   LessonPlan,
+  FlashcardInput,
+  FlashcardSet,
 } from "../types";
 import { getSyllabusForGrade } from "../data/syllabusContext";
 
@@ -21,7 +23,7 @@ if (!apiKey) {
 const ai = new GoogleGenAI({ apiKey });
 
 /* =========================
-   SCHEME OF WORK GENERATOR
+   SCHEME OF WORK
 ========================= */
 
 export const generateSubjectScheme = async (
@@ -41,7 +43,7 @@ Subject: ${subject}
 Term: ${input.term}
 Year: ${input.year}
 
-Syllabus context:
+Syllabus Context:
 ${syllabusContext}
 
 Return STRICT JSON with:
@@ -50,9 +52,7 @@ Return STRICT JSON with:
 - crossCuttingIssues
 - entries
 `,
-    config: {
-      responseMimeType: "application/json",
-    },
+    config: { responseMimeType: "application/json" },
   });
 
   const data = JSON.parse(response.text || "{}");
@@ -82,16 +82,14 @@ export const generateSingleLessonPlan = async (
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
     contents: `
-You are a Zimbabwean primary school teacher.
-
-Create a DETAILED daily lesson plan.
+Create a detailed DAILY lesson plan.
 
 Grade: ${input.grade}
 Subject: ${input.subject}
 Topic: ${input.topic}
 Context: ${input.context || "General"}
 
-Syllabus context:
+Syllabus Context:
 ${syllabusContext}
 
 Return STRICT JSON with:
@@ -102,9 +100,7 @@ Return STRICT JSON with:
 - lessonSteps (Introduction, Step 1, Step 2, Step 3, Conclusion)
 - evaluation
 `,
-    config: {
-      responseMimeType: "application/json",
-    },
+    config: { responseMimeType: "application/json" },
   });
 
   const data = JSON.parse(response.text || "{}");
@@ -122,5 +118,54 @@ Return STRICT JSON with:
     assumedKnowledge: data.assumedKnowledge || "",
     lessonSteps: data.lessonSteps || [],
     evaluation: data.evaluation || "",
+  };
+};
+
+/* =========================
+   FLASHCARDS
+========================= */
+
+export const generateFlashcards = async (
+  input: FlashcardInput
+): Promise<FlashcardSet> => {
+  const syllabusContext = getSyllabusForGrade(input.grade, input.subject);
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: `
+Create ${input.count} study flashcards.
+
+Grade: ${input.grade}
+Subject: ${input.subject}
+Topic: ${input.topic}
+
+Syllabus Context:
+${syllabusContext}
+
+Return STRICT JSON:
+{
+  "cards": [
+    { "front": "...", "back": "..." }
+  ]
+}
+`,
+    config: { responseMimeType: "application/json" },
+  });
+
+  const data = JSON.parse(response.text || "{}");
+
+  const cards = Array.isArray(data.cards)
+    ? data.cards.map((c: any, i: number) => ({
+        id: `card-${i + 1}`,
+        front: c.front || "",
+        back: c.back || "",
+      }))
+    : [];
+
+  return {
+    topic: input.topic,
+    grade: input.grade,
+    subject: input.subject,
+    cards,
   };
 };

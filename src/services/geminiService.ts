@@ -7,6 +7,9 @@ import {
   LessonPlan,
   FlashcardInput,
   FlashcardSet,
+  AssessmentInput,
+  Assessment,
+  AssessmentType,
 } from "../types";
 import { getSyllabusForGrade } from "../data/syllabusContext";
 
@@ -35,9 +38,8 @@ export const generateSubjectScheme = async (
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
     contents: `
-You are a Zimbabwean primary school teacher.
+Generate a Scheme of Work.
 
-Generate a Scheme of Work for:
 Grade: ${input.grade}
 Subject: ${subject}
 Term: ${input.term}
@@ -46,11 +48,8 @@ Year: ${input.year}
 Syllabus Context:
 ${syllabusContext}
 
-Return STRICT JSON with:
-- aims
-- topicsCovered
-- crossCuttingIssues
-- entries
+Return JSON with:
+aims, topicsCovered, crossCuttingIssues, entries
 `,
     config: { responseMimeType: "application/json" },
   });
@@ -82,23 +81,17 @@ export const generateSingleLessonPlan = async (
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
     contents: `
-Create a detailed DAILY lesson plan.
+Create a daily lesson plan.
 
 Grade: ${input.grade}
 Subject: ${input.subject}
 Topic: ${input.topic}
-Context: ${input.context || "General"}
 
 Syllabus Context:
 ${syllabusContext}
 
-Return STRICT JSON with:
-- subTopic
-- objectives (array)
-- materials (array)
-- assumedKnowledge
-- lessonSteps (Introduction, Step 1, Step 2, Step 3, Conclusion)
-- evaluation
+Return JSON with:
+subTopic, objectives, materials, assumedKnowledge, lessonSteps, evaluation
 `,
     config: { responseMimeType: "application/json" },
   });
@@ -133,7 +126,7 @@ export const generateFlashcards = async (
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
     contents: `
-Create ${input.count} study flashcards.
+Create ${input.count} flashcards.
 
 Grade: ${input.grade}
 Subject: ${input.subject}
@@ -142,12 +135,8 @@ Topic: ${input.topic}
 Syllabus Context:
 ${syllabusContext}
 
-Return STRICT JSON:
-{
-  "cards": [
-    { "front": "...", "back": "..." }
-  ]
-}
+Return JSON:
+{ "cards": [{ "front": "...", "back": "..." }] }
 `,
     config: { responseMimeType: "application/json" },
   });
@@ -167,5 +156,61 @@ Return STRICT JSON:
     grade: input.grade,
     subject: input.subject,
     cards,
+  };
+};
+
+/* =========================
+   ASSESSMENT / TEST
+========================= */
+
+export const generateAssessment = async (
+  input: AssessmentInput
+): Promise<Assessment> => {
+  const syllabusContext = getSyllabusForGrade(input.grade, input.subject);
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: `
+Create an assessment.
+
+Grade: ${input.grade}
+Subject: ${input.subject}
+Topic: ${input.topic}
+Type: ${input.type}
+
+Syllabus Context:
+${syllabusContext}
+
+Rules:
+- MCQ: 4 options
+- Structured: short answers
+- Composition: essay prompts
+
+Return JSON:
+{
+  title,
+  questions: [
+    { id, section, type, question, options?, answer, marks }
+  ]
+}
+`,
+    config: { responseMimeType: "application/json" },
+  });
+
+  const data = JSON.parse(response.text || "{}");
+
+  const questions = Array.isArray(data.questions) ? data.questions : [];
+  const totalMarks = questions.reduce(
+    (sum: number, q: any) => sum + (q.marks || 1),
+    0
+  );
+
+  return {
+    title: data.title || `${input.topic} Assessment`,
+    grade: input.grade,
+    subject: input.subject,
+    topic: input.topic,
+    questions,
+    totalMarks,
   };
 };
